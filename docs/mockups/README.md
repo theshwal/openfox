@@ -6,5 +6,3 @@ Use the original generated PNG screenshots instead:
 
 - `openfox-essential-feed-inspector.png`
 - `openfox-essential-feed-workspace.png`
-
-These PNGs still need to be uploaded as binary assets before the issue body can embed them.
