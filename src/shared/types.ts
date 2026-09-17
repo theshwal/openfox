@@ -197,6 +197,12 @@ export interface MessageStats {
   generationTokens: number // total completion tokens
   generationSpeed: number // aggregate tokens/second
   llmCalls?: LLMCallStats[] // optional per-call breakdown for this response
+  // Observability rollup — optional for backward compatibility.
+  cachedPromptTokens?: number
+  cacheWriteTokens?: number
+  cacheSource?: CacheSource
+  retryCount?: number
+  compactionCount?: number
 }
 
 export interface LLMCallStats {
@@ -216,6 +222,12 @@ export interface LLMCallStats {
   generationSpeed: number // tok/s for token generation
   totalTime: number // ttft + completionTime
   timestamp?: string // optional completion timestamp for ordering/display
+  // Observability per-call — optional for backward compatibility.
+  cachedPromptTokens?: number
+  cacheWriteTokens?: number
+  cacheSource?: CacheSource
+  contextSize?: number
+  retries?: number
   // Request parameters used for this call
   temperature?: number
   topP?: number
@@ -240,6 +252,13 @@ export interface StatsDataPoint {
   totalTime: number // seconds
   aiTime: number // totalTime - toolTime (LLM inference only)
   toolTime: number // seconds spent in tools during this response
+  // Observability cache attribution (per-response rollup). All optional to
+  // keep backward compatibility with sessions that predate the field.
+  cachedPromptTokens?: number
+  cacheWriteTokens?: number
+  cacheSource?: 'provider' | 'estimated' | 'unavailable'
+  retryCount?: number
+  compactionCount?: number
 }
 
 export interface CallStatsDataPoint {
@@ -265,6 +284,12 @@ export interface CallStatsDataPoint {
   topP?: number
   topK?: number
   maxTokens?: number
+  // Observability cache attribution (per-call). Optional for backward compat.
+  cachedPromptTokens?: number
+  cacheWriteTokens?: number
+  cacheSource?: 'provider' | 'estimated' | 'unavailable'
+  contextSize?: number
+  retries?: number
 }
 
 // Aggregated session-level stats for benchmarking
@@ -905,4 +930,193 @@ export interface ElementData {
   outerHTML: string
   rect: { x: number; y: number; width: number; height: number }
   attributes: Record<string, string>
+}
+
+// ============================================================================
+// Observability Types (LLM context, cache, retries, compactions, tool activity)
+// ============================================================================
+
+/** Source attribution for cache/token metrics.
+ *  - 'provider': data is explicitly announced by the provider's API response.
+ *  - 'estimated': data was computed from OpenFox-side context tracking (not a real provider cache hit).
+ *  - 'unavailable': neither provider nor reliable estimate available. */
+export type CacheSource = 'provider' | 'estimated' | 'unavailable'
+
+/** Token usage returned by the LLM provider (or derived when missing).
+ *  - `promptTokens` is the total prompt sent to the model (cache + uncached).
+ *  - `cachedPromptTokens` is the portion served from the provider's cache when available.
+ *  - `cacheWriteTokens` is the portion written to the provider's cache (e.g. Anthropic cache_creation).
+ *  - `cacheSource` always describes where the cache numbers come from. */
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  cachedPromptTokens?: number
+  cacheWriteTokens?: number
+  cacheSource?: CacheSource
+}
+
+/** Coarse-grained tool category used for dashboard breakdowns.
+ *  Real tool names are kept alongside for drill-down. */
+export type ToolCategory =
+  'read' | 'search' | 'edit' | 'shell' | 'test' | 'git' | 'browser' | 'mcp' | 'sub-agent' | 'other'
+
+/** Compaction event record extracted from `context.compacted` events. */
+export interface CompactionRecord {
+  timestamp: number
+  closedWindowId: string
+  newWindowId: string
+  beforeTokens: number
+  afterTokens: number
+  reduction: number // before - after
+  reductionPercent: number // (before - after) / before * 100, 0 if before=0
+  subAgentId?: string
+  subAgentType?: string
+}
+
+/** Retry event record. `type` covers all OpenFox retry sources. */
+export interface RetryRecord {
+  timestamp: number
+  type: 'pattern' | 'truncation' | 'continuation'
+  reason?: string
+  pattern?: string
+  field?: string
+  responseIndex: number
+  callIndex?: number
+  attempt?: number
+  maxAttempts?: number
+  subAgentId?: string
+}
+
+/** Per-tool aggregate (count and duration). */
+export interface ToolActivityEntry {
+  toolName: string
+  category: ToolCategory
+  count: number
+  totalDurationMs: number
+  errorCount: number
+}
+
+/** Tool activity rollup. */
+export interface ToolActivitySummary {
+  totalCount: number
+  totalErrors: number
+  byCategory: Record<ToolCategory, number>
+  byTool: ToolActivityEntry[]
+}
+
+/** Per-call observability row (provider-agnostic). */
+export interface ObservabilityCallRow {
+  sessionCallIndex: number
+  responseIndex: number
+  callIndex: number
+  messageId: string
+  timestamp: string
+  providerId: string
+  providerName: string
+  backend: ProviderBackend
+  model: string
+  mode: ToolMode
+  promptTokens: number
+  cachedPromptTokens?: number
+  cacheWriteTokens?: number
+  cacheSource?: CacheSource
+  completionTokens: number
+  ttft: number
+  completionTime: number
+  totalTime: number
+  prefillSpeed: number
+  generationSpeed: number
+  contextSize: number
+  retries: number
+  /** First tool name invoked after this LLM call (joined from events), or undefined. */
+  followingTool?: string
+}
+
+/** Per-response observability rollup. */
+export interface ObservabilityResponseRow {
+  responseIndex: number
+  messageId: string
+  timestamp: string
+  durationSeconds: number
+  llmCalls: number
+  retryCount: number
+  contextBefore: number
+  contextAfter: number
+  rawPrompt: number
+  cacheRead: number
+  cacheWrite: number
+  newInput: number
+  cacheHitRatio?: number
+  cacheSource: CacheSource
+  toolCalls: number
+  toolBreakdown: ToolActivityEntry[]
+  retries: RetryRecord[]
+  compactions: CompactionRecord[]
+}
+
+/** Session-level observability summary. */
+export interface ObservabilitySummary {
+  durationSeconds: number
+  responses: number
+  llmCalls: number
+  callsPerResponse: number
+  rawPromptTokens: number
+  providerCachedTokens: number
+  cacheWriteTokens: number
+  estimatedNewInputTokens: number
+  /** Σ cached / Σ prompt over calls where cacheSource='provider'. Undefined when no provider cache data. */
+  providerCacheHitRatio?: number
+  contextP50: number
+  contextP95: number
+  contextMax: number
+  /** Σ rawPrompt / Σ uncached (provider calls only). Undefined when denominator is 0 or unreliable. */
+  contextAmplificationFactor?: number
+  /** Source of the amplification attribution.
+   *  - 'provider': all calls have provider cache data and the denominator is reliable.
+   *  - 'partial': some calls have provider cache data, others don't; CAF still computed from
+   *    the provider subset only, so the displayed value is a lower bound.
+   *  - 'unavailable': no provider cache data — CAF is hidden. */
+  amplificationSource?: 'provider' | 'partial' | 'unavailable'
+  generationTokens: number
+  generatedPerCall: number
+  cacheSource: CacheSource
+  retries: number
+  compactions: number
+  subAgentCalls: number
+  toolCalls: number
+}
+
+/** Per-model observability rollup. */
+export interface ModelObservability {
+  key: string
+  label: string
+  providerId: string
+  providerName: string
+  backend: ProviderBackend
+  model: string
+  summary: ObservabilitySummary
+  calls: ObservabilityCallRow[]
+}
+
+/** Root observability payload for a session. */
+export interface ObservabilityStats {
+  sessionId: string
+  sessionTitle?: string
+  generatedAt: string
+  summary: ObservabilitySummary
+  responses: ObservabilityResponseRow[]
+  calls: ObservabilityCallRow[]
+  compactions: CompactionRecord[]
+  retries: RetryRecord[]
+  toolActivity: ToolActivitySummary
+  modelBreakdown: ModelObservability[]
+  /** Schema version for stable JSON export. */
+  schemaVersion: 'obs.v1'
+}
+
+/** Minimal snapshot shape consumed by the web dashboard. */
+export interface ObservabilitySnapshot {
+  contextWindows?: CompactionRecord[]
+  formatRetries?: Array<{ attempt: number; maxAttempts: number; timestamp: number }>
 }

@@ -2,6 +2,7 @@ import { ScrollArea } from '../shared/ScrollArea'
 import { getLocale } from '@shared/i18n/index.js'
 import { useT } from '../../hooks/useT'
 import { Fragment, useRef, useCallback, useEffect, useMemo, useState } from 'react'
+import { useObservability } from '../../hooks/useObservability'
 import { Modal } from '../shared/SelfContainedModal'
 import { DualSparkline } from '../shared/Sparkline'
 import { buildPerformanceChartData, buildResponseLogRows, type ResponseLogRow } from '@shared/stats-view.js'
@@ -72,8 +73,9 @@ function formatTimestamp(ts: string): string {
 /**
  * Create JSON export data
  */
-function createExportData(stats: ModelSessionStats) {
-  return {
+function createExportData(stats: ModelSessionStats, observability?: { summary: { cacheSource: string } } | null) {
+  const base = {
+    schemaVersion: 'obs.v1',
     exportedAt: new Date().toISOString(),
     providerId: stats.providerId,
     providerName: stats.providerName,
@@ -111,6 +113,11 @@ function createExportData(stats: ModelSessionStats) {
       mode: dp.mode,
       promptTokens: dp.promptTokens,
       completionTokens: dp.completionTokens,
+      cachedPromptTokens: dp.cachedPromptTokens,
+      cacheWriteTokens: dp.cacheWriteTokens,
+      cacheSource: dp.cacheSource,
+      contextSize: dp.contextSize,
+      retries: dp.retries,
       ttft: dp.ttft,
       completionTime: dp.completionTime,
       prefillSpeed: dp.prefillSpeed,
@@ -118,6 +125,18 @@ function createExportData(stats: ModelSessionStats) {
       totalTime: dp.totalTime,
     })),
   }
+  // Embed observability summary for cross-model benchmark stability (obs.v1).
+  // Note: events-driven fields (compactions, retries, toolActivity) are not
+  // available from a SessionStats fetch — they need the full event stream.
+  if (observability && observability.summary) {
+    return {
+      ...base,
+      observability: {
+        summary: observability.summary,
+      },
+    }
+  }
+  return base
 }
 
 export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalProps) {
@@ -130,6 +149,11 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
   const [loadError, setLoadError] = useState<string | null>(null)
   // Guards against a stale in-flight fetch landing after a session switch.
   const loadRequestRef = useRef(0)
+
+  // Observability view: prefer the lazily-loaded fullStats (carries the
+  // server-computed per-call cache attribution) over messages+events which
+  // are not available in the modal scope.
+  const observability = useObservability([], null, fullStats)
 
   const modelGroups = fullStats?.modelGroups ?? summary?.modelGroups ?? []
 
@@ -211,7 +235,7 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
   const handleCopyJson = useCallback(() => {
     if (!currentStats) return
 
-    const data = createExportData(currentStats)
+    const data = createExportData(currentStats, observability)
     navigator.clipboard.writeText(JSON.stringify(data, null, 2)).catch((err) => console.error('Failed to copy:', err))
   }, [currentStats])
 
