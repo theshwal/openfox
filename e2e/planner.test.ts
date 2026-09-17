@@ -70,6 +70,22 @@ describe('Planner Mode', () => {
       expect(response.stats!.totalTime).toBeGreaterThan(0)
     })
 
+    it('exposes observability counters on chat.done stats', async () => {
+      const { client } = pool.get()
+
+      await client.send('chat.send', { content: 'Say exactly: "ping"' })
+
+      const response = await client.waitForChatDone()
+
+      // The observability counters are populated on every response, even
+      // when no provider cache information is available (the mock LLM is
+      // in that state). retryCount and compactionCount default to 0.
+      expect(response.stats).toBeDefined()
+      // The wire shape only carries aggregate counters; the full observability
+      // surface is exposed via the per-call stats folded into MessageStats.
+      expect(response.stats!.prefillTokens).toBeGreaterThan(0)
+    })
+
     it('accumulates content from deltas', async () => {
       const { client } = pool.get()
 
