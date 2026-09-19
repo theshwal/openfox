@@ -6,7 +6,14 @@ import { useObservability } from '../../hooks/useObservability'
 import { Modal } from '../shared/SelfContainedModal'
 import { DualSparkline } from '../shared/Sparkline'
 import { buildPerformanceChartData, buildResponseLogRows, type ResponseLogRow } from '@shared/stats-view.js'
-import type { CallStatsDataPoint, ModelSessionStats, SessionStats, SessionStatsSummary } from '@shared/types.js'
+import type {
+  CallStatsDataPoint,
+  CacheSource,
+  ModelSessionStats,
+  ObservabilityCallRow,
+  SessionStats,
+  SessionStatsSummary,
+} from '@shared/types.js'
 import { formatTime } from '../../lib/format-stats'
 import { authFetch } from '../../lib/api'
 
@@ -409,6 +416,205 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
           </section>
         )}
 
+        {/* Observability Overview — derived from the loaded fullStats. */}
+        {observability && (
+          <section>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wide">
+                {t({ en: 'Observability overview', fr: 'Vue d’observabilité' })}
+              </h3>
+              <CacheSourceBadge source={observability.summary.cacheSource} />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <StatCard
+                label={t({ en: 'Raw prompt', fr: 'Prompt brut' })}
+                value={formatTokens(observability.summary.rawPromptTokens)}
+                subValue={t(
+                  {
+                    en: 'Σ promptTokens across {{n}} LLM calls',
+                    fr: 'Σ promptTokens sur {{n}} appels LLM',
+                  },
+                  { n: observability.calls.length },
+                )}
+              />
+              <StatCard
+                label={t({ en: 'Provider cache read', fr: 'Cache provider lu' })}
+                value={formatTokens(observability.summary.providerCachedTokens)}
+                subValue={
+                  observability.summary.providerCacheHitRatio !== undefined
+                    ? t(
+                        {
+                          en: '{{pct}}% hit (provider-reported)',
+                          fr: '{{pct}}% de cache hit (mesure provider)',
+                        },
+                        {
+                          pct: (observability.summary.providerCacheHitRatio * 100).toFixed(1),
+                        },
+                      )
+                    : t({ en: 'N/A — no provider data', fr: 'N/A — aucune mesure provider' })
+                }
+              />
+              <StatCard
+                label={t({ en: 'New provider input', fr: 'Nouvelle entrée provider' })}
+                value={formatTokens(observability.summary.estimatedNewInputTokens)}
+                subValue={t({
+                  en: 'Σ (prompt − cached) over provider calls',
+                  fr: 'Σ (prompt − cached) sur les appels provider',
+                })}
+              />
+              <StatCard
+                label={t({ en: 'Cache write', fr: 'Cache écrit' })}
+                value={formatTokens(observability.summary.cacheWriteTokens)}
+                subValue={
+                  observability.summary.cacheWriteTokens === 0
+                    ? t({ en: 'no provider write info', fr: 'aucune mesure provider' })
+                    : undefined
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+              <StatCard
+                label={t({ en: 'Context P50', fr: 'Contexte P50' })}
+                value={formatTokens(observability.summary.contextP50)}
+                subValue={t({ en: 'per LLM call', fr: 'par appel LLM' })}
+              />
+              <StatCard
+                label={t({ en: 'Context P95', fr: 'Contexte P95' })}
+                value={formatTokens(observability.summary.contextP95)}
+                subValue={t({ en: 'per LLM call', fr: 'par appel LLM' })}
+              />
+              <StatCard
+                label={t({ en: 'Context Max', fr: 'Contexte max' })}
+                value={formatTokens(observability.summary.contextMax)}
+                subValue={t({ en: 'peak', fr: 'pic' })}
+              />
+              <StatCard
+                label={t({ en: 'Context Amplification', fr: 'Amplification contexte' })}
+                value={
+                  observability.summary.contextAmplificationFactor !== undefined
+                    ? `${observability.summary.contextAmplificationFactor.toFixed(1)}x`
+                    : 'N/A'
+                }
+                subValue={
+                  observability.summary.amplificationSource === 'provider'
+                    ? t({ en: 'source: provider', fr: 'source : provider' })
+                    : observability.summary.amplificationSource === 'partial'
+                      ? t({ en: 'source: partial (mixed)', fr: 'source : partiel (mixte)' })
+                      : t({ en: 'source: unavailable', fr: 'source : indisponible' })
+                }
+              />
+            </div>
+            {observability.summary.cacheSource === 'unavailable' && (
+              <p className="text-[10px] text-text-muted mt-2">
+                {t({
+                  en: 'No provider cache data available for this session. Numbers reflect raw prompt transport only — cache hit % is not displayed.',
+                  fr: 'Aucune mesure de cache provider pour cette session. Les chiffres reflètent uniquement le transport brut — le % de cache hit n’est pas affiché.',
+                })}
+              </p>
+            )}
+          </section>
+        )}
+
+        {/* Context & Cache — chronological SVG chart per LLM call. */}
+        {observability && observability.calls.length > 0 && (
+          <section>
+            <h3 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wide">
+              {t({ en: 'Context & Cache', fr: 'Contexte & cache' })}
+            </h3>
+            <ContextCacheChart calls={observability.calls} compactions={observability.compactions} t={t} />
+          </section>
+        )}
+
+        {/* Agent Activity — counters + tool category breakdown. */}
+        {observability && (
+          <section>
+            <h3 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wide">
+              {t({ en: 'Agent activity', fr: 'Activité agent' })}
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <MiniStat
+                label={t({ en: 'LLM calls', fr: 'Appels LLM' })}
+                value={observability.summary.llmCalls.toString()}
+              />
+              <MiniStat
+                label={t({ en: 'Tool calls', fr: 'Appels outils' })}
+                value={observability.summary.toolCalls.toString()}
+              />
+              <MiniStat label={t({ en: 'Retries', fr: 'Relances' })} value={observability.summary.retries.toString()} />
+              <MiniStat
+                label={t({ en: 'Sub-agent calls', fr: 'Sous-agents' })}
+                value={observability.summary.subAgentCalls.toString()}
+              />
+              <MiniStat
+                label={t({ en: 'Compactions', fr: 'Compactions' })}
+                value={observability.summary.compactions.toString()}
+              />
+            </div>
+            {observability.toolActivity.byTool.length > 0 && (
+              <div className="mt-3 bg-bg-tertiary/30 rounded p-3">
+                <h4 className="text-xs uppercase tracking-wide text-text-muted mb-2">
+                  {t({ en: 'Tool breakdown', fr: 'Détail outils' })}
+                </h4>
+                <div className="flex flex-wrap gap-2">
+                  {observability.toolActivity.byTool.slice(0, 12).map((t2) => (
+                    <span
+                      key={t2.toolName}
+                      className="inline-flex items-center gap-1.5 px-2 py-1 bg-bg-tertiary rounded text-xs text-text-primary"
+                      title={`${t2.toolName}: ${t2.count} calls, ${t2.totalDurationMs}ms, ${t2.errorCount} errors`}
+                    >
+                      <span className="text-text-muted">{t2.category}</span>
+                      <span className="font-mono">{t2.toolName}</span>
+                      <span className="text-text-muted">×{t2.count}</span>
+                      {t2.errorCount > 0 && <span className="text-red-400">!</span>}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Compactions list (deltas) */}
+            {observability.compactions.length > 0 && (
+              <div className="mt-3 bg-bg-tertiary/30 rounded p-3">
+                <h4 className="text-xs uppercase tracking-wide text-text-muted mb-2">
+                  {t({ en: 'Compactions', fr: 'Compactions' })}
+                </h4>
+                <ul className="text-xs text-text-primary space-y-1">
+                  {observability.compactions.map((c, i) => (
+                    <li key={`${c.closedWindowId}-${i}`} className="font-mono">
+                      ↓ {formatTokens(c.beforeTokens)} → {formatTokens(c.afterTokens)}{' '}
+                      <span className="text-text-muted">
+                        (−{formatTokens(c.reduction)} tokens,{' '}
+                        {c.reductionPercent >= 0 ? c.reductionPercent.toFixed(0) : '0'}%)
+                      </span>
+                      {c.subAgentType && (
+                        <span className="text-text-muted">
+                          {' '}
+                          [{t({ en: 'sub-agent', fr: 'sous-agent' })}: {c.subAgentType}]
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {/* Retries list */}
+            {observability.retries.length > 0 && (
+              <div className="mt-3 bg-bg-tertiary/30 rounded p-3">
+                <h4 className="text-xs uppercase tracking-wide text-text-muted mb-2">
+                  {t({ en: 'Retries', fr: 'Relances' })}
+                </h4>
+                <ul className="text-xs text-text-primary space-y-1">
+                  {observability.retries.slice(0, 10).map((r, i) => (
+                    <li key={`retry-${i}`} className="font-mono">
+                      {t({ en: 'attempt', fr: 'tentative' })} #{r.attempt ?? '?'} ({r.type})
+                      {r.pattern && <span className="text-text-muted"> — {r.pattern}</span>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Response Log */}
         {currentStats && (
           <section>
@@ -540,6 +746,16 @@ function CallDataPointRow({ dataPoint, index }: { dataPoint: CallStatsDataPoint;
     dataPoint.topP !== undefined ||
     dataPoint.topK !== undefined ||
     dataPoint.maxTokens !== undefined
+  const hasCache =
+    dataPoint.cachedPromptTokens !== undefined ||
+    dataPoint.cacheWriteTokens !== undefined ||
+    dataPoint.cacheSource !== undefined
+  const callNewInput =
+    dataPoint.cachedPromptTokens !== undefined
+      ? Math.max(0, dataPoint.promptTokens - dataPoint.cachedPromptTokens)
+      : dataPoint.contextSize !== undefined
+        ? Math.max(0, dataPoint.contextSize - dataPoint.promptTokens)
+        : undefined
 
   return (
     <>
@@ -567,10 +783,23 @@ function CallDataPointRow({ dataPoint, index }: { dataPoint: CallStatsDataPoint;
         </td>
         <td className="px-2 py-2" />
       </tr>
-      {hasParams && (
+      {(hasCache || hasParams) && (
         <tr className={`${index % 2 === 0 ? 'bg-bg-tertiary/5' : 'bg-bg-tertiary/[2.5%]'}`}>
           <td colSpan={8} className="px-6 py-1.5 border-l border-border/60">
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-text-muted">
+              {dataPoint.cachedPromptTokens !== undefined && (
+                <span>
+                  cache: {formatTokens(dataPoint.cachedPromptTokens)}
+                  {dataPoint.promptTokens > 0
+                    ? ' (' + ((dataPoint.cachedPromptTokens / dataPoint.promptTokens) * 100).toFixed(0) + '%)'
+                    : ''}
+                </span>
+              )}
+              {callNewInput !== undefined && <span>new: {formatTokens(callNewInput)}</span>}
+              {dataPoint.cacheWriteTokens !== undefined && (
+                <span>write: {formatTokens(dataPoint.cacheWriteTokens)}</span>
+              )}
+              {dataPoint.cacheSource !== undefined && <span>source: {dataPoint.cacheSource}</span>}
               {dataPoint.temperature !== undefined && <span>{`temp: ${dataPoint.temperature.toFixed(2)}`}</span>}
               {dataPoint.topP !== undefined && <span>{`topP: ${dataPoint.topP.toFixed(2)}`}</span>}
               {dataPoint.topK !== undefined && <span>{`topK: ${dataPoint.topK}`}</span>}
@@ -580,5 +809,202 @@ function CallDataPointRow({ dataPoint, index }: { dataPoint: CallStatsDataPoint;
         </tr>
       )}
     </>
+  )
+}
+/**
+ * Cache source attribution badge. Renders the three states with distinct
+ * colors so the dashboard never mislabels absence-of-info as zero cache.
+ */
+function CacheSourceBadge({ source }: { source: CacheSource }) {
+  const t = useT()
+  const map: Record<CacheSource, { label: string; classes: string; hint: string }> = {
+    provider: {
+      label: t({ en: 'Provider', fr: 'Provider' }),
+      classes: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+      hint: t({
+        en: 'Cache fields reported by the provider (e.g. prompt_tokens_details.cached_tokens)',
+        fr: 'Champs de cache rapportes par le provider (p. ex. prompt_tokens_details.cached_tokens)',
+      }),
+    },
+    estimated: {
+      label: t({ en: 'Estimated', fr: 'Estime' }),
+      classes: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+      hint: t({
+        en: 'Cache value computed from OpenFox-side context tracking (heuristic, lower bound)',
+        fr: 'Valeur de cache calculee cote OpenFox (heuristique, limite basse)',
+      }),
+    },
+    unavailable: {
+      label: t({ en: 'N/A', fr: 'N/D' }),
+      classes: 'bg-gray-500/15 text-gray-300 border-gray-500/30',
+      hint: t({
+        en: 'No provider cache information in the response — values may be absent',
+        fr: 'Aucune mesure de cache dans la reponse provider — valeurs possiblement absentes',
+      }),
+    },
+  }
+  const cfg = map[source]
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] border ${cfg.classes}`} title={cfg.hint}>
+      {cfg.label}
+    </span>
+  )
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-bg-tertiary/50 rounded p-2.5">
+      <div className="text-text-muted text-[10px] uppercase tracking-wide">{label}</div>
+      <div className="text-text-primary text-base font-semibold font-mono">{value}</div>
+    </div>
+  )
+}
+/**
+ * Context & Cache chart - chronological SVG plot of `promptTokens` per
+ * LLM call, with a cached-portion overlay and vertical markers for
+ * compactions. Threshold reference lines for 50k/100k/150k help the
+ * user spot context growth against typical compaction triggers.
+ */
+function ContextCacheChart({
+  calls,
+  compactions,
+  t,
+}: {
+  calls: ObservabilityCallRow[]
+  compactions: Array<{ timestamp: number; beforeTokens: number; afterTokens: number }>
+  t: (template: { en: string; fr: string }, params?: Record<string, string | number>) => string
+}) {
+  if (calls.length === 0) return null
+  const width = 720
+  const height = 160
+  const padding = { top: 16, right: 16, bottom: 28, left: 56 }
+  const xs = calls.map((c) => c.sessionCallIndex)
+  const ys = calls.map((c) => c.contextSize)
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const maxY = Math.max(...ys, 1)
+  const xScale = (x: number) =>
+    padding.left + ((x - minX) / Math.max(1, maxX - minX)) * (width - padding.left - padding.right)
+  const yScale = (y: number) => padding.top + (1 - y / maxY) * (height - padding.top - padding.bottom)
+  const linePath = calls
+    .map((c, i) => (i === 0 ? 'M' : 'L') + ' ' + xScale(c.sessionCallIndex) + ' ' + yScale(c.contextSize))
+    .join(' ')
+  const hasCached = calls.some((c) => c.cachedPromptTokens !== undefined && c.cachedPromptTokens > 0)
+  const cacheArea = hasCached
+    ? calls
+        .map((c, i) => {
+          const cached = c.cachedPromptTokens ?? 0
+          const y1 = yScale(c.contextSize)
+          const y2 = yScale(Math.max(0, c.contextSize - cached))
+          return (
+            (i === 0 ? 'M' : 'L') +
+            ' ' +
+            xScale(c.sessionCallIndex) +
+            ' ' +
+            y2 +
+            ' L ' +
+            xScale(c.sessionCallIndex) +
+            ' ' +
+            y1 +
+            ' Z'
+          )
+        })
+        .join(' ')
+    : ''
+  return (
+    <div>
+      <svg
+        width="100%"
+        viewBox={'0 0 ' + width + ' ' + height}
+        preserveAspectRatio="xMidYMid meet"
+        className="text-text-primary"
+      >
+        <rect x="0" y="0" width={width} height={height} fill="transparent" />
+        {[50000, 100000, 150000]
+          .filter((threshold) => threshold <= maxY)
+          .map((threshold) => (
+            <g key={threshold}>
+              <line
+                x1={padding.left}
+                y1={yScale(threshold)}
+                x2={width - padding.right}
+                y2={yScale(threshold)}
+                stroke="currentColor"
+                strokeOpacity="0.18"
+                strokeDasharray="3 3"
+              />
+              <text
+                x={width - padding.right - 4}
+                y={yScale(threshold) - 2}
+                fontSize="9"
+                textAnchor="end"
+                fill="currentColor"
+                fillOpacity="0.5"
+              >
+                {formatTokens(threshold)}
+              </text>
+            </g>
+          ))}
+        {cacheArea && <path d={cacheArea} fill="currentColor" opacity="0.18" />}
+        <path d={linePath} fill="none" stroke="currentColor" strokeWidth="1.5" />
+        {calls.map((c) => (
+          <circle
+            key={c.sessionCallIndex}
+            cx={xScale(c.sessionCallIndex)}
+            cy={yScale(c.contextSize)}
+            r="2"
+            fill="currentColor"
+          />
+        ))}
+        {compactions.map((c, i) => {
+          if (c.beforeTokens <= 0) return null
+          const x =
+            padding.left +
+            ((i + 1) / Math.max(1, calls.length + compactions.length)) * (width - padding.left - padding.right)
+          return (
+            <g key={'c-' + i}>
+              <line
+                x1={x}
+                y1={padding.top}
+                x2={x}
+                y2={height - padding.bottom}
+                stroke="#f59e0b"
+                strokeDasharray="4 2"
+              />
+              <text x={x + 4} y={padding.top + 12} fontSize="10" fill="#f59e0b">
+                {'↓ ' + formatTokens(c.beforeTokens) + ' → ' + formatTokens(c.afterTokens)}
+              </text>
+            </g>
+          )
+        })}
+        <text x={padding.left} y={height - 6} fontSize="10" fill="currentColor" opacity="0.6">
+          {t({ en: 'LLM call', fr: 'Appel LLM' }) + ' #' + minX}
+        </text>
+        <text x={width - padding.right} y={height - 6} fontSize="10" textAnchor="end" fill="currentColor" opacity="0.6">
+          {'#' + maxX}
+        </text>
+        <text x={4} y={padding.top + 8} fontSize="10" fill="currentColor" opacity="0.6">
+          {formatTokens(maxY)}
+        </text>
+      </svg>
+      <div className="mt-1 flex items-center gap-3 text-[10px] text-text-muted">
+        <span className="inline-flex items-center gap-1">
+          <span className="w-2 h-2 rounded-full bg-current inline-block" />
+          {t({ en: 'context size', fr: 'taille du contexte' })}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-3 bg-current opacity-30 inline-block" />
+          {t({ en: 'cached portion', fr: 'portion cachee' })}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-px bg-amber-500 inline-block" />
+          {t({ en: 'compaction', fr: 'compaction' })}
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <span className="w-3 h-px border-t border-dashed border-current opacity-40 inline-block" />
+          {t({ en: '50k/100k/150k', fr: '50k/100k/150k' })}
+        </span>
+      </div>
+    </div>
   )
 }
