@@ -580,9 +580,10 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
                 <ul className="text-xs text-text-primary space-y-1">
                   {observability.compactions.map((c, i) => (
                     <li key={`${c.closedWindowId}-${i}`} className="font-mono">
-                      ↓ {formatTokens(c.beforeTokens)} → {formatTokens(c.afterTokens)}{' '}
+                      {'↓ ' + formatTokens(c.beforeTokens) + ' → ' + formatTokens(c.afterTokens) + ' '}
                       <span className="text-text-muted">
-                        (−{formatTokens(c.reduction)} tokens,{' '}
+                        {'(−' + formatTokens(c.reduction) + ' '}
+                        {t({ en: 'tokens', fr: 'tokens' }) + ', '}
                         {c.reductionPercent >= 0 ? c.reductionPercent.toFixed(0) : '0'}%)
                       </span>
                       {c.subAgentType && (
@@ -741,6 +742,7 @@ function ResponseRow({
 }
 
 function CallDataPointRow({ dataPoint, index }: { dataPoint: CallStatsDataPoint; index: number }) {
+  const t = useT()
   const hasParams =
     dataPoint.temperature !== undefined ||
     dataPoint.topP !== undefined ||
@@ -789,17 +791,27 @@ function CallDataPointRow({ dataPoint, index }: { dataPoint: CallStatsDataPoint;
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-text-muted">
               {dataPoint.cachedPromptTokens !== undefined && (
                 <span>
-                  cache: {formatTokens(dataPoint.cachedPromptTokens)}
+                  {t({ en: 'cache', fr: 'cache' })}: {formatTokens(dataPoint.cachedPromptTokens)}
                   {dataPoint.promptTokens > 0
                     ? ' (' + ((dataPoint.cachedPromptTokens / dataPoint.promptTokens) * 100).toFixed(0) + '%)'
                     : ''}
                 </span>
               )}
-              {callNewInput !== undefined && <span>new: {formatTokens(callNewInput)}</span>}
-              {dataPoint.cacheWriteTokens !== undefined && (
-                <span>write: {formatTokens(dataPoint.cacheWriteTokens)}</span>
+              {callNewInput !== undefined && (
+                <span>
+                  {t({ en: 'new', fr: 'new' })}: {formatTokens(callNewInput)}
+                </span>
               )}
-              {dataPoint.cacheSource !== undefined && <span>source: {dataPoint.cacheSource}</span>}
+              {dataPoint.cacheWriteTokens !== undefined && (
+                <span>
+                  {t({ en: 'write', fr: 'write' })}: {formatTokens(dataPoint.cacheWriteTokens)}
+                </span>
+              )}
+              {dataPoint.cacheSource !== undefined && (
+                <span>
+                  {t({ en: 'source', fr: 'source' })}: {dataPoint.cacheSource}
+                </span>
+              )}
               {dataPoint.temperature !== undefined && <span>{`temp: ${dataPoint.temperature.toFixed(2)}`}</span>}
               {dataPoint.topP !== undefined && <span>{`topP: ${dataPoint.topP.toFixed(2)}`}</span>}
               {dataPoint.topK !== undefined && <span>{`topK: ${dataPoint.topK}`}</span>}
