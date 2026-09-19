@@ -90,7 +90,12 @@ describe('stream-pure', () => {
         { type: 'text', content: 'I will help.' },
         { type: 'tool_call', toolCallId: 'call-1' },
       ],
-      usage: { promptTokens: 120, completionTokens: 30 },
+      usage: {
+        promptTokens: 120,
+        completionTokens: 30,
+        totalTokens: 150,
+        cacheSource: 'unavailable' as const,
+      },
       timing: expect.objectContaining({ ttft: expect.any(Number), completionTime: expect.any(Number) }),
       aborted: false,
       modelParams: expect.objectContaining({
@@ -112,7 +117,7 @@ describe('stream-pure', () => {
           content: 'hi',
           toolCalls: [],
           finishReason: 'stop',
-          usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10 },
+          usage: { promptTokens: 5, completionTokens: 5, totalTokens: 10, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -144,7 +149,7 @@ describe('stream-pure', () => {
           content: '',
           toolCalls: [{ id: 'call-1', name: 'run_command', arguments: { command: 'echo hello' } }],
           finishReason: 'tool_calls',
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -191,7 +196,7 @@ describe('stream-pure', () => {
             },
           ],
           finishReason: 'tool_calls',
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -264,7 +269,7 @@ describe('stream-pure', () => {
     // caller owns failure UX, so no chat.error is emitted.
     expect(events).toEqual([])
     expect(result.error).toBe('boom')
-    expect(result.usage).toEqual({ promptTokens: 0, completionTokens: 0 })
+    expect(result.usage).toEqual({ promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheSource: 'unavailable' })
   })
 
   it('streams partial content live when the stream fails mid-flight (case 2)', async () => {

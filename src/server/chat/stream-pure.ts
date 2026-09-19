@@ -70,7 +70,7 @@ export interface PureStreamResult {
   thinkingContent?: string
   toolCalls: ToolCall[]
   segments: MessageSegment[]
-  usage: { promptTokens: number; completionTokens: number }
+  usage: import('../../shared/types.js').TokenUsage
   timing: StreamTiming
   aborted: boolean
   modelParams?: ModelParams
@@ -131,7 +131,7 @@ function createEmptyStreamResult(
     content: '',
     toolCalls: [],
     segments: [],
-    usage: { promptTokens: 0, completionTokens: 0 },
+    usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheSource: 'unavailable' as const },
     timing: { ttft: 0, completionTime: 0, tps: 0, prefillTps: 0 },
     aborted,
     modelParams,
@@ -407,6 +407,14 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
     usage: {
       promptTokens: result.response.usage.promptTokens,
       completionTokens: result.response.usage.completionTokens,
+      totalTokens: result.response.usage.totalTokens,
+      ...(result.response.usage.cachedPromptTokens !== undefined && {
+        cachedPromptTokens: result.response.usage.cachedPromptTokens,
+      }),
+      ...(result.response.usage.cacheWriteTokens !== undefined && {
+        cacheWriteTokens: result.response.usage.cacheWriteTokens,
+      }),
+      cacheSource: result.response.usage.cacheSource ?? 'unavailable',
     },
     timing: result.timing,
     aborted,
@@ -588,6 +596,11 @@ export class TurnMetrics {
     completionTokens: number,
     previousContextTokens?: number,
     modelParams?: ModelParams,
+    cache?: {
+      cachedPromptTokens?: number
+      cacheWriteTokens?: number
+      cacheSource?: 'provider' | 'estimated' | 'unavailable'
+    },
   ): void {
     const callIndex = this.llmCalls.length + 1
     this.totalPrefillTokens += promptTokens
@@ -629,6 +642,11 @@ export class TurnMetrics {
         ...(this.modelParams.topP !== undefined && { topP: this.modelParams.topP }),
         ...(this.modelParams.topK !== undefined && { topK: this.modelParams.topK }),
         ...(this.modelParams.maxTokens !== undefined && { maxTokens: this.modelParams.maxTokens }),
+        // Provider cache attribution (forwarded verbatim from agent-loop).
+        ...(cache?.cachedPromptTokens !== undefined && { cachedPromptTokens: cache.cachedPromptTokens }),
+        ...(cache?.cacheWriteTokens !== undefined && { cacheWriteTokens: cache.cacheWriteTokens }),
+        ...(cache?.cacheSource && { cacheSource: cache.cacheSource }),
+        contextSize: promptTokens,
       },
     ]
   }

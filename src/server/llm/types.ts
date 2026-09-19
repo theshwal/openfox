@@ -60,11 +60,7 @@ export interface LLMCompletionResponse {
   thinkingContent?: string
   reasoning_content?: string
   finishReason: 'stop' | 'tool_calls' | 'length' | 'content_filter'
-  usage: {
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-  }
+  usage: import('../../shared/types.js').TokenUsage
   /** Raw API response body, only set when returnRaw was requested */
   raw?: string
 }

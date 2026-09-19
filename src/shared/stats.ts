@@ -197,6 +197,12 @@ function buildSessionStats(messagesWithStats: MessageWithStats[]): Omit<SessionS
         ...(call.topP !== undefined && { topP: call.topP }),
         ...(call.topK !== undefined && { topK: call.topK }),
         ...(call.maxTokens !== undefined && { maxTokens: call.maxTokens }),
+        // Provider cache attribution (forwarded from the LLM call).
+        ...(call.cachedPromptTokens !== undefined && { cachedPromptTokens: call.cachedPromptTokens }),
+        ...(call.cacheWriteTokens !== undefined && { cacheWriteTokens: call.cacheWriteTokens }),
+        ...(call.cacheSource !== undefined && { cacheSource: call.cacheSource }),
+        ...(call.contextSize !== undefined && { contextSize: call.contextSize }),
+        ...(call.retries !== undefined && { retries: call.retries }),
       })
     }
   }
