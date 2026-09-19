@@ -546,6 +546,15 @@ export async function runTopLevelAgentLoop(
       result.usage.completionTokens,
       previousContextTokens,
       result.modelParams,
+      {
+        ...(result.usage.cachedPromptTokens !== undefined && {
+          cachedPromptTokens: result.usage.cachedPromptTokens,
+        }),
+        ...(result.usage.cacheWriteTokens !== undefined && {
+          cacheWriteTokens: result.usage.cacheWriteTokens,
+        }),
+        ...(result.usage.cacheSource && { cacheSource: result.usage.cacheSource }),
+      },
     )
     // Stream the running turn totals to the client so the sidebar can build
     // dynamically as each LLM call completes. Sub-agent turns run inside the

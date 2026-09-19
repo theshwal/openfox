@@ -487,4 +487,65 @@ describe('computeObservability', () => {
     // Per-model excludes the sub-agent compaction.
     expect(result!.modelBreakdown[0]!.summary.compactions).toBe(1)
   })
+
+  it('estimatedNewInputTokens correctly subtracts cachedPromptTokens for provider calls', () => {
+    // Two provider calls with overlapping cache:
+    //   call 1: prompt=10000, cached=9000  → new = 1000
+    //   call 2: prompt=12000, cached=11000 → new = 1000
+    // Total new = 2000. Total raw = 22000. Total cached = 20000.
+    const stats = makeStats({
+      prefillTokens: 22000,
+      cachedPromptTokens: 20000,
+      cacheSource: 'provider',
+      llmCalls: [
+        makeCall({ promptTokens: 10000, cachedPromptTokens: 9000, cacheSource: 'provider' }),
+        makeCall({ promptTokens: 12000, cachedPromptTokens: 11000, cacheSource: 'provider' }),
+      ],
+    })
+    const messages = [makeMessage('m1', stats, '2024-01-01T00:00:00Z')]
+    const result = computeObservability(messages, [])
+    expect(result).not.toBeNull()
+    // raw - cached = 22000 - 20000 = 2000 (new input)
+    expect(result!.summary.estimatedNewInputTokens).toBe(2000)
+    expect(result!.summary.providerCachedTokens).toBe(20000)
+    expect(result!.summary.rawPromptTokens).toBe(22000)
+    // providerCacheHitRatio = 20000 / 22000 ≈ 0.909
+    expect(result!.summary.providerCacheHitRatio).toBeCloseTo(0.909, 3)
+  })
+
+  it('estimatedNewInputTokens does NOT invent cache when cacheSource is unavailable', () => {
+    // call with cacheSource=unavailable: no cache information.
+    // estimatedNewInputTokens MUST equal promptTokens (full prompt counted as new),
+    // never zero (absence of info is not zero cache).
+    const stats = makeStats({
+      prefillTokens: 1000,
+      cacheSource: 'unavailable',
+      llmCalls: [makeCall({ promptTokens: 1000, cacheSource: 'unavailable' })],
+    })
+    const messages = [makeMessage('m1', stats, '2024-01-01T00:00:00Z')]
+    const result = computeObservability(messages, [])
+    expect(result).not.toBeNull()
+    expect(result!.summary.estimatedNewInputTokens).toBe(1000)
+    expect(result!.summary.providerCacheHitRatio).toBeUndefined()
+  })
+
+  it('mixed provider+unavailable: estimatedNewInputTokens is a lower bound (mixed)', () => {
+    // Provider call: prompt=1000, cached=900 → new = 100
+    // Unavailable call: prompt=500 → new = 500 (we don't know)
+    // Total new = 600 (a lower bound; true value is ≥ 600).
+    const stats = makeStats({
+      prefillTokens: 1500,
+      cachedPromptTokens: 900,
+      cacheSource: 'unavailable', // mixed → 'unavailable'
+      llmCalls: [
+        makeCall({ callIndex: 1, promptTokens: 1000, cachedPromptTokens: 900, cacheSource: 'provider' }),
+        makeCall({ callIndex: 2, promptTokens: 500, cacheSource: 'unavailable' }),
+      ],
+    })
+    const messages = [makeMessage('m1', stats, '2024-01-01T00:00:00Z')]
+    const result = computeObservability(messages, [])
+    expect(result).not.toBeNull()
+    expect(result!.summary.estimatedNewInputTokens).toBe(600) // 100 + 500
+    expect(result!.summary.cacheSource).toBe('unavailable')
+  })
 })

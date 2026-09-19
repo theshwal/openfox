@@ -391,7 +391,14 @@ function computeSummary(args: {
     0,
   )
   const cacheWriteTokens = calls.reduce((sum, c) => sum + (c.cacheWriteTokens ?? 0), 0)
-  const estimatedNewInputTokens = calls.reduce((sum, c) => sum + (c.cacheSource === 'provider' ? 0 : c.promptTokens), 0)
+  // estimatedNewInputTokens = Σ (promptTokens - cachedPromptTokens) for provider calls,
+  //                     + Σ promptTokens for non-provider calls (we don't know).
+  // Never substitutes absence of cache info as zero cache.
+  const estimatedNewInputTokens = calls.reduce(
+    (sum, c) =>
+      sum + (c.cacheSource === 'provider' ? Math.max(0, c.promptTokens - (c.cachedPromptTokens ?? 0)) : c.promptTokens),
+    0,
+  )
   const providerDenominator = calls
     .filter((c) => c.cacheSource === 'provider')
     .reduce((sum, c) => sum + c.promptTokens, 0)

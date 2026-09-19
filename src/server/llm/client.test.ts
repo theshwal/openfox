@@ -126,7 +126,7 @@ describe('llm client', () => {
       thinkingContent: 'Reasoning here',
       toolCalls: [{ id: 'call-1', name: 'glob', arguments: { pattern: '*.ts' } }],
       finishReason: 'tool_calls',
-      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 },
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15, cacheSource: 'unavailable' as const },
     })
   })
 
@@ -159,7 +159,7 @@ describe('llm client', () => {
       content: 'Final answer',
       thinkingContent: 'My reasoning process',
       finishReason: 'stop',
-      usage: { promptTokens: 4, completionTokens: 2, totalTokens: 6 },
+      usage: { promptTokens: 4, completionTokens: 2, totalTokens: 6, cacheSource: 'unavailable' as const },
     })
   })
 
@@ -248,7 +248,7 @@ describe('llm client', () => {
       content: 'Final content',
       thinkingContent: 'reasoning process',
       finishReason: 'stop',
-      usage: { promptTokens: 6, completionTokens: 2, totalTokens: 8 },
+      usage: { promptTokens: 6, completionTokens: 2, totalTokens: 8, cacheSource: 'unavailable' as const },
     })
   })
 
@@ -402,7 +402,7 @@ describe('llm client', () => {
           thinkingContent: 'think',
           toolCalls: [{ id: 'call-1', name: 'glob', arguments: { pattern: '*.ts' } }],
           finishReason: 'tool_calls',
-          usage: { promptTokens: 11, completionTokens: 6, totalTokens: 17 },
+          usage: { promptTokens: 11, completionTokens: 6, totalTokens: 17, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -432,7 +432,7 @@ describe('llm client', () => {
     expect(events.at(-1)).toMatchObject({
       type: 'done',
       response: {
-        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheSource: 'unavailable' as const },
       },
     })
   })
@@ -468,7 +468,7 @@ describe('llm client', () => {
     expect(events.at(-1)).toMatchObject({
       type: 'done',
       response: {
-        usage: { promptTokens: 11, completionTokens: 6, totalTokens: 17 },
+        usage: { promptTokens: 11, completionTokens: 6, totalTokens: 17, cacheSource: 'unavailable' as const },
       },
     })
   })
@@ -517,7 +517,7 @@ describe('llm client', () => {
           content: 'final answer',
           thinkingContent: 'step by step',
           finishReason: 'stop',
-          usage: { promptTokens: 3, completionTokens: 2, totalTokens: 5 },
+          usage: { promptTokens: 3, completionTokens: 2, totalTokens: 5, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -567,7 +567,7 @@ describe('llm client', () => {
           content: '',
           thinkingContent: 'reasoning process',
           finishReason: 'tool_calls',
-          usage: { promptTokens: 9, completionTokens: 3, totalTokens: 12 },
+          usage: { promptTokens: 9, completionTokens: 3, totalTokens: 12, cacheSource: 'unavailable' as const },
           toolCalls: [
             {
               id: 'call-1',
@@ -843,7 +843,7 @@ describe('llm client', () => {
           content: 'final answer',
           thinkingContent: 'step by step',
           finishReason: 'stop',
-          usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
+          usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -928,7 +928,7 @@ describe('llm client', () => {
           content: 'Hello there! How are you?',
           thinkingContent: 'Let me think...',
           finishReason: 'stop',
-          usage: { promptTokens: 10, completionTokens: 8, totalTokens: 18 },
+          usage: { promptTokens: 10, completionTokens: 8, totalTokens: 18, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -983,7 +983,7 @@ describe('llm client', () => {
           id: 'resp-1',
           content: 'Just text',
           finishReason: 'stop',
-          usage: { promptTokens: 5, completionTokens: 2, totalTokens: 7 },
+          usage: { promptTokens: 5, completionTokens: 2, totalTokens: 7, cacheSource: 'unavailable' as const },
         },
       },
     ])
@@ -1078,5 +1078,193 @@ describe('opencode session headers', () => {
     await client.complete({ messages: [{ role: 'user', content: 'hello' }], sessionId: 'sess-4' })
 
     expect(httpClientCreateMock.mock.calls[0]?.[1]?.headers).toBeUndefined()
+  })
+})
+
+// =============================================================================
+// Provider cache attribution — end-to-end propagation through the client.
+// These tests verify that the cache fields extracted by `extractTokenUsage`
+// actually reach the LLMCompletionResponse.usage, not just the parser.
+// =============================================================================
+
+describe('LLM client — provider cache attribution', () => {
+  it('non-streaming: forwards cachedPromptTokens from prompt_tokens_details.cached_tokens', async () => {
+    httpClientCreateMock.mockResolvedValueOnce({
+      id: 'resp-cache-1',
+      choices: [{ finish_reason: 'stop', message: { content: 'hi' } }],
+      usage: {
+        prompt_tokens: 1000,
+        completion_tokens: 100,
+        total_tokens: 1100,
+        prompt_tokens_details: { cached_tokens: 900 },
+      },
+    })
+    const client = createLLMClient(createConfig(), 'vllm')
+    const response = await client.complete({ messages: [{ role: 'user', content: 'hello' }] })
+    expect(response.usage).toEqual({
+      promptTokens: 1000,
+      completionTokens: 100,
+      totalTokens: 1100,
+      cachedPromptTokens: 900,
+      cacheSource: 'provider',
+    })
+  })
+
+  it('non-streaming: forwards cache_read_input_tokens (Anthropic-style)', async () => {
+    httpClientCreateMock.mockResolvedValueOnce({
+      id: 'resp-cache-2',
+      choices: [{ finish_reason: 'stop', message: { content: 'hi' } }],
+      usage: {
+        prompt_tokens: 2000,
+        completion_tokens: 200,
+        total_tokens: 2200,
+        cache_read_input_tokens: 1500,
+        cache_creation_input_tokens: 500,
+      },
+    })
+    const client = createLLMClient(createConfig(), 'vllm')
+    const response = await client.complete({ messages: [{ role: 'user', content: 'hello' }] })
+    expect(response.usage).toEqual({
+      promptTokens: 2000,
+      completionTokens: 200,
+      totalTokens: 2200,
+      cachedPromptTokens: 1500,
+      cacheWriteTokens: 500,
+      cacheSource: 'provider',
+    })
+  })
+
+  it('non-streaming: cached_tokens field at 0 is preserved as a provider measurement', async () => {
+    httpClientCreateMock.mockResolvedValueOnce({
+      id: 'resp-cache-3',
+      choices: [{ finish_reason: 'stop', message: { content: 'hi' } }],
+      usage: {
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        total_tokens: 150,
+        cached_tokens: 0,
+      },
+    })
+    const client = createLLMClient(createConfig(), 'vllm')
+    const response = await client.complete({ messages: [{ role: 'user', content: 'hello' }] })
+    expect(response.usage.cachedPromptTokens).toBe(0)
+    expect(response.usage.cacheSource).toBe('provider')
+  })
+
+  it('non-streaming: no cache field present → cacheSource=unavailable', async () => {
+    httpClientCreateMock.mockResolvedValueOnce({
+      id: 'resp-cache-4',
+      choices: [{ finish_reason: 'stop', message: { content: 'hi' } }],
+      usage: { prompt_tokens: 100, completion_tokens: 50, total_tokens: 150 },
+    })
+    const client = createLLMClient(createConfig(), 'vllm')
+    const response = await client.complete({ messages: [{ role: 'user', content: 'hello' }] })
+    expect(response.usage.cacheSource).toBe('unavailable')
+    expect(response.usage.cachedPromptTokens).toBeUndefined()
+  })
+
+  it('streaming: forwards cached_tokens from the final usage chunk', async () => {
+    httpClientCreateStreamMock.mockReturnValueOnce(
+      (async function* () {
+        yield createChunk({
+          choices: [{ delta: { content: 'hi' } }],
+          usage: {
+            prompt_tokens: 2000,
+            completion_tokens: 200,
+            total_tokens: 2200,
+            cached_tokens: 1850,
+          },
+        })
+      })(),
+    )
+    const client = createLLMClient(createConfig(), 'vllm')
+    const events: Array<{
+      type: string
+      response?: {
+        usage: {
+          promptTokens: number
+          completionTokens: number
+          totalTokens: number
+          cachedPromptTokens?: number
+          cacheWriteTokens?: number
+          cacheSource: 'provider' | 'estimated' | 'unavailable'
+        }
+      }
+    }> = []
+    for await (const event of client.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      events.push(
+        event as {
+          type: string
+          response?: {
+            usage: {
+              promptTokens: number
+              completionTokens: number
+              totalTokens: number
+              cachedPromptTokens?: number
+              cacheWriteTokens?: number
+              cacheSource: 'provider' | 'estimated' | 'unavailable'
+            }
+          }
+        },
+      )
+    }
+    const last = events.at(-1)!
+    expect(last.type).toBe('done')
+    expect(last.response!.usage).toEqual({
+      promptTokens: 2000,
+      completionTokens: 200,
+      totalTokens: 2200,
+      cachedPromptTokens: 1850,
+      cacheSource: 'provider',
+    })
+  })
+
+  it('streaming: uses the last non-null chunk usage (mid-stream updates)', async () => {
+    httpClientCreateStreamMock.mockReturnValueOnce(
+      (async function* () {
+        yield createChunk({
+          choices: [{ delta: { content: 'a' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110, cached_tokens: 50 },
+        })
+        yield createChunk({
+          choices: [{ delta: { content: 'b' } }],
+          usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120, cached_tokens: 60 },
+        })
+      })(),
+    )
+    const client = createLLMClient(createConfig(), 'vllm')
+    const events: Array<{
+      type: string
+      response?: {
+        usage: {
+          promptTokens: number
+          completionTokens: number
+          totalTokens: number
+          cachedPromptTokens?: number
+          cacheWriteTokens?: number
+          cacheSource: 'provider' | 'estimated' | 'unavailable'
+        }
+      }
+    }> = []
+    for await (const event of client.stream({ messages: [{ role: 'user', content: 'hello' }] })) {
+      events.push(
+        event as {
+          type: string
+          response?: {
+            usage: {
+              promptTokens: number
+              completionTokens: number
+              totalTokens: number
+              cachedPromptTokens?: number
+              cacheWriteTokens?: number
+              cacheSource: 'provider' | 'estimated' | 'unavailable'
+            }
+          }
+        },
+      )
+    }
+    const last = events.at(-1)!
+    expect(last.response!.usage.cachedPromptTokens).toBe(60)
+    expect(last.response!.usage.completionTokens).toBe(20)
   })
 })

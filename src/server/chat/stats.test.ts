@@ -27,6 +27,123 @@ describe('stats computation', () => {
       expect(stats.generationSpeed).toBe(50)
       expect(stats.totalTime).toBe(17) // 5 + 10 + 2
     })
+
+    it('propagates provider cache attribution into MessageStats and LLMCallStats', () => {
+      const stats = computeMessageStats({
+        identity,
+        mode: 'builder',
+        timing: { ttft: 5, completionTime: 10, tps: 0, prefillTps: 0 },
+        usage: {
+          promptTokens: 10000,
+          completionTokens: 200,
+          cachedPromptTokens: 9000,
+          cacheSource: 'provider',
+        },
+      })
+      expect(stats.cachedPromptTokens).toBe(9000)
+      expect(stats.cacheSource).toBe('provider')
+      expect(stats.llmCalls).toHaveLength(1)
+      expect(stats.llmCalls![0]!.cachedPromptTokens).toBe(9000)
+      expect(stats.llmCalls![0]!.cacheSource).toBe('provider')
+      expect(stats.llmCalls![0]!.contextSize).toBe(10000)
+    })
+
+    it('does NOT set cache fields when usage has none (cacheSource=unavailable default)', () => {
+      const stats = computeMessageStats({
+        identity,
+        mode: 'builder',
+        timing: { ttft: 1, completionTime: 1, tps: 0, prefillTps: 0 },
+        usage: { promptTokens: 100, completionTokens: 10 },
+      })
+      expect(stats.cachedPromptTokens).toBeUndefined()
+      expect(stats.cacheWriteTokens).toBeUndefined()
+      expect(stats.cacheSource).toBeUndefined()
+    })
+  })
+
+  describe('computeAggregatedStats — cache rollup', () => {
+    it('aggregates cachedPromptTokens across multiple calls', () => {
+      const calls = [
+        {
+          providerId: 'p1',
+          providerName: 'Local',
+          backend: 'vllm' as const,
+          model: 'm',
+          callIndex: 1,
+          promptTokens: 10000,
+          completionTokens: 100,
+          cachedPromptTokens: 9000,
+          cacheSource: 'provider' as const,
+          ttft: 1,
+          completionTime: 1,
+          prefillSpeed: 10000,
+          generationSpeed: 100,
+          totalTime: 2,
+        },
+        {
+          providerId: 'p1',
+          providerName: 'Local',
+          backend: 'vllm' as const,
+          model: 'm',
+          callIndex: 2,
+          promptTokens: 12000,
+          completionTokens: 200,
+          cachedPromptTokens: 11000,
+          cacheSource: 'provider' as const,
+          ttft: 1,
+          completionTime: 1,
+          prefillSpeed: 12000,
+          generationSpeed: 200,
+          totalTime: 2,
+        },
+      ]
+      const stats = computeAggregatedStats({
+        identity,
+        mode: 'builder',
+        totalPrefillTokens: 22000,
+        totalGenTokens: 300,
+        totalPrefillTime: 2,
+        totalGenTime: 2,
+        totalToolTime: 0,
+        totalTime: 4,
+        llmCalls: calls,
+      })
+      expect(stats.cachedPromptTokens).toBe(20000) // 9000 + 11000
+      expect(stats.cacheSource).toBe('provider')
+      expect(stats.prefillTokens).toBe(22000)
+    })
+
+    it('leaves cache fields undefined when no LLM call reports cache', () => {
+      const calls = [
+        {
+          providerId: 'p1',
+          providerName: 'Local',
+          backend: 'vllm' as const,
+          model: 'm',
+          callIndex: 1,
+          promptTokens: 100,
+          completionTokens: 10,
+          ttft: 1,
+          completionTime: 1,
+          prefillSpeed: 100,
+          generationSpeed: 10,
+          totalTime: 2,
+        },
+      ]
+      const stats = computeAggregatedStats({
+        identity,
+        mode: 'builder',
+        totalPrefillTokens: 100,
+        totalGenTokens: 10,
+        totalPrefillTime: 1,
+        totalGenTime: 1,
+        totalToolTime: 0,
+        totalTime: 2,
+        llmCalls: calls,
+      })
+      expect(stats.cachedPromptTokens).toBeUndefined()
+      expect(stats.cacheSource).toBeUndefined()
+    })
   })
 
   describe('computeAggregatedStats', () => {
