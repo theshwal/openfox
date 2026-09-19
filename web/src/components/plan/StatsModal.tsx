@@ -584,12 +584,11 @@ export function StatsModal({ isOpen, onClose, summary, sessionId }: StatsModalPr
                       <span className="text-text-muted">
                         {'(−' + formatTokens(c.reduction) + ' '}
                         {t({ en: 'tokens', fr: 'tokens' }) + ', '}
-                        {c.reductionPercent >= 0 ? c.reductionPercent.toFixed(0) : '0'}%)
+                        {c.reductionPercent >= 0 ? c.reductionPercent.toFixed(0) + '%)' : t({ en: '0%)', fr: '0%)' })}
                       </span>
                       {c.subAgentType && (
                         <span className="text-text-muted">
-                          {' '}
-                          [{t({ en: 'sub-agent', fr: 'sous-agent' })}: {c.subAgentType}]
+                          {t({ en: ' ', fr: ' ' })}[{t({ en: 'sub-agent', fr: 'sous-agent' })}: {c.subAgentType}]
                         </span>
                       )}
                     </li>
