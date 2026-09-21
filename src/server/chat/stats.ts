@@ -7,6 +7,9 @@ import type { StreamTiming } from '../llm/streaming.js'
 
 const roundTo1 = (n: number): number => Math.round(n * 10) / 10
 
+type CacheAwareUsage = Pick<TokenUsage, 'promptTokens' | 'completionTokens'> &
+  Partial<Omit<TokenUsage, 'promptTokens' | 'completionTokens'>>
+
 export interface ModelParams {
   temperature?: number
   topP?: number
@@ -23,7 +26,7 @@ function buildCallStats(input: {
   prefTokenIncrement?: number
   timestamp?: string
   modelParams?: ModelParams
-  providerUsage?: TokenUsage
+  providerUsage?: CacheAwareUsage
 }): LLMCallStats {
   const {
     identity,
@@ -67,7 +70,7 @@ export interface StatsInput {
   identity: StatsIdentity
   mode: ToolMode
   timing: StreamTiming
-  usage: TokenUsage
+  usage: CacheAwareUsage
   /** New (non-cached) tokens that required actual prompt processing */
   prefTokenIncrement?: number
   /** Tool execution time in seconds (default: 0) */
