@@ -601,6 +601,7 @@ export async function runTopLevelAgentLoop(
       result.usage.completionTokens,
       previousContextTokens,
       result.modelParams,
+      result.usage,
     )
     // Stream the running turn totals to the client so the sidebar can build
     // dynamically as each LLM call completes. Sub-agent turns run inside the
