@@ -441,13 +441,26 @@ export async function runTopLevelAgentLoop(
 
       if (!attemptResult.error) {
         result = attemptResult
+        // Provider cache attribution is sourced directly from the LLM
+        // response. Plugins can compute hit ratio / context amplification
+        // from cachedPromptTokens + promptTokens + totalTokens without
+        // ever touching prefTokenIncrement (which is OpenFox-internal).
+        const usage = attemptResult.usage
         emitPluginHook('llm.completed', {
           sessionId,
           data: {
             model: attemptClient.getModel(),
             finishReason: attemptResult.finishReason,
-            promptTokens: attemptResult.usage.promptTokens,
-            completionTokens: attemptResult.usage.completionTokens,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            totalTokens: usage.totalTokens,
+            ...(usage.cachedPromptTokens !== undefined && {
+              cachedPromptTokens: usage.cachedPromptTokens,
+            }),
+            ...(usage.cacheWriteTokens !== undefined && {
+              cacheWriteTokens: usage.cacheWriteTokens,
+            }),
+            ...(usage.cacheSource !== undefined && { cacheSource: usage.cacheSource }),
             toolCalls: attemptResult.toolCalls.length,
           },
         })
@@ -548,6 +561,17 @@ export async function runTopLevelAgentLoop(
           attempt: retryLimiter.count(),
           maxAttempts: retryLimiter.maxRetries(),
           matchedContent: result.patternMatch.matchedContent,
+        },
+      })
+      // Fire plugin hook (Plugin API v2) — provider-agnostic retry signal.
+      emitPluginHook('retry.triggered', {
+        sessionId,
+        data: {
+          type: 'pattern',
+          reason: result.patternMatch.pattern,
+          messageId: assistantMsgId,
+          attempt: retryLimiter.count(),
+          maxAttempts: retryLimiter.maxRetries(),
         },
       })
 
@@ -844,6 +868,22 @@ ${COMPACTION_PROMPT}`,
           afterTokens: 0,
           summary,
           ...subAgentTags(),
+        },
+      })
+      // Fire plugin hook (Plugin API v2) — provider-agnostic compaction signal.
+      emitPluginHook('context.compacted', {
+        sessionId,
+        data: {
+          closedWindowId,
+          newWindowId,
+          beforeTokens: tokenCountAtClose,
+          afterTokens: 0,
+          ...(config.subAgentMetadata?.subAgentId
+            ? { subAgentId: config.subAgentMetadata.subAgentId }
+            : {}),
+          ...(config.subAgentMetadata?.subAgentType
+            ? { subAgentType: config.subAgentMetadata.subAgentType }
+            : {}),
         },
       })
 
