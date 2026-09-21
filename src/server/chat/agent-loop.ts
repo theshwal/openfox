@@ -607,6 +607,7 @@ export async function runTopLevelAgentLoop(
       result.usage.completionTokens,
       previousContextTokens,
       result.modelParams,
+      result.usage,
     )
     // Accumulate wall-clock thinking time across LLM attempts in this turn.
     if (result.thinkingDurationMs !== undefined) {

@@ -17,6 +17,7 @@ import type {
   StatsIdentity,
   ToolResult,
   Attachment,
+  TokenUsage,
 } from '../../shared/types.js'
 import type { RequestContextMessage } from '../chat/request-context.js'
 import type { LLMClientWithModel } from '../llm/client.js'
@@ -799,6 +800,7 @@ export class TurnMetrics {
     completionTokens: number,
     previousContextTokens?: number,
     modelParams?: ModelParams,
+    providerUsage?: Partial<TokenUsage>,
   ): void {
     const callIndex = this.llmCalls.length + 1
     this.totalPrefillTokens += promptTokens
@@ -829,6 +831,15 @@ export class TurnMetrics {
         promptTokens,
         completionTokens,
         ...(prefTokenIncrement !== undefined && { prefTokenIncrement }),
+        ...(providerUsage?.cachedPromptTokens !== undefined && {
+          cachedPromptTokens: providerUsage.cachedPromptTokens,
+        }),
+        ...(providerUsage?.cacheWriteTokens !== undefined && {
+          cacheWriteTokens: providerUsage.cacheWriteTokens,
+        }),
+        ...(providerUsage?.cacheSource !== undefined && {
+          cacheSource: providerUsage.cacheSource,
+        }),
         ttft: timing.ttft,
         completionTime: timing.completionTime,
         prefillSpeed: timing.ttft > 0 ? Math.round((prefillSource / timing.ttft) * 10) / 10 : 0,
