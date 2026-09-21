@@ -2,7 +2,7 @@
  * Message stats computation - single source of truth for the formula.
  */
 
-import type { LLMCallStats, MessageStats, StatsIdentity, ToolMode } from '../../shared/types.js'
+import type { LLMCallStats, MessageStats, StatsIdentity, ToolMode, TokenUsage } from '../../shared/types.js'
 import type { StreamTiming } from '../llm/streaming.js'
 
 const roundTo1 = (n: number): number => Math.round(n * 10) / 10
@@ -23,9 +23,19 @@ function buildCallStats(input: {
   prefTokenIncrement?: number
   timestamp?: string
   modelParams?: ModelParams
+  providerUsage?: TokenUsage
 }): LLMCallStats {
-  const { identity, callIndex, timing, promptTokens, completionTokens, prefTokenIncrement, timestamp, modelParams } =
-    input
+  const {
+    identity,
+    callIndex,
+    timing,
+    promptTokens,
+    completionTokens,
+    prefTokenIncrement,
+    timestamp,
+    modelParams,
+    providerUsage,
+  } = input
   const prefillSource = prefTokenIncrement ?? promptTokens
   return {
     ...identity,
@@ -33,6 +43,13 @@ function buildCallStats(input: {
     promptTokens,
     completionTokens,
     ...(prefTokenIncrement !== undefined && { prefTokenIncrement }),
+    ...(providerUsage?.cachedPromptTokens !== undefined && {
+      cachedPromptTokens: providerUsage.cachedPromptTokens,
+    }),
+    ...(providerUsage?.cacheWriteTokens !== undefined && {
+      cacheWriteTokens: providerUsage.cacheWriteTokens,
+    }),
+    ...(providerUsage?.cacheSource !== undefined && { cacheSource: providerUsage.cacheSource }),
     ttft: timing.ttft,
     completionTime: timing.completionTime,
     prefillSpeed: timing.ttft > 0 ? roundTo1(prefillSource / timing.ttft) : 0,
@@ -50,7 +67,7 @@ export interface StatsInput {
   identity: StatsIdentity
   mode: ToolMode
   timing: StreamTiming
-  usage: { promptTokens: number; completionTokens: number }
+  usage: TokenUsage
   /** New (non-cached) tokens that required actual prompt processing */
   prefTokenIncrement?: number
   /** Tool execution time in seconds (default: 0) */
@@ -93,6 +110,9 @@ export function computeMessageStats(input: StatsInput): MessageStats {
     prefillSpeed: timing.ttft > 0 ? roundTo1(prefillSource / timing.ttft) : 0,
     generationTokens: usage.completionTokens,
     generationSpeed: timing.completionTime > 0 ? roundTo1(usage.completionTokens / timing.completionTime) : 0,
+    ...(usage.cachedPromptTokens !== undefined && { cachedPromptTokens: usage.cachedPromptTokens }),
+    ...(usage.cacheWriteTokens !== undefined && { cacheWriteTokens: usage.cacheWriteTokens }),
+    ...(usage.cacheSource !== undefined && { cacheSource: usage.cacheSource }),
     llmCalls: [
       buildCallStats({
         identity,
@@ -103,6 +123,7 @@ export function computeMessageStats(input: StatsInput): MessageStats {
         ...(prefTokenIncrement !== undefined && { prefTokenIncrement }),
         ...(timestamp ? { timestamp } : {}),
         ...(modelParams && { modelParams }),
+        providerUsage: usage,
       }),
     ],
   }
@@ -139,6 +160,21 @@ export function computeAggregatedStats(input: {
 
   const prefillSource = totalPrefillIncrement ?? totalPrefillTokens
 
+  // Response-level cache totals are only exposed when every persisted call has
+  // explicit provider attribution. A mixed/partial response must not turn
+  // missing provider cache data into an apparent zero.
+  const completeProviderCache =
+    Boolean(llmCalls?.length) &&
+    llmCalls!.every((call) => call.cacheSource === 'provider' && call.cachedPromptTokens !== undefined)
+  const cachedPromptTokens = completeProviderCache
+    ? llmCalls!.reduce((sum, call) => sum + (call.cachedPromptTokens ?? 0), 0)
+    : undefined
+  const completeCacheWrite =
+    completeProviderCache && llmCalls!.every((call) => call.cacheWriteTokens !== undefined)
+  const cacheWriteTokens = completeCacheWrite
+    ? llmCalls!.reduce((sum, call) => sum + (call.cacheWriteTokens ?? 0), 0)
+    : undefined
+
   return {
     ...identity,
     mode,
@@ -149,6 +185,9 @@ export function computeAggregatedStats(input: {
     prefillSpeed: totalPrefillTime > 0 ? roundTo1(prefillSource / totalPrefillTime) : 0,
     generationTokens: totalGenTokens,
     generationSpeed: totalGenTime > 0 ? roundTo1(totalGenTokens / totalGenTime) : 0,
+    ...(cachedPromptTokens !== undefined && { cachedPromptTokens }),
+    ...(cacheWriteTokens !== undefined && { cacheWriteTokens }),
+    ...(completeProviderCache ? { cacheSource: 'provider' as const } : {}),
     ...(llmCalls ? { llmCalls } : {}),
   }
 }
