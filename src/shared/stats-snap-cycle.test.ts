@@ -304,7 +304,7 @@ describe('legacy compactionCount (snapshot.contextWindows empty, contextState.co
     })
     expect(rollup.compactionCount).toBe(3) // 2 legacy + 1 post
     expect(rollup.compactions.length).toBe(1) // only the post event has details
-    expect(rollup.compactionsDetailsAvailable).toBe(true) // details ARE available
+    expect(rollup.compactionsDetailsAvailable).toBe(false) // historical details remain partial
   })
 
   it('modern snapshot with contextWindows sets details available', () => {
