@@ -1073,4 +1073,13 @@ export interface SessionStatsEventRollup {
   subAgentCalls: number
   compactionCount: number
   retryCount: number
+  /**
+   * True when `compactions` carries the full per-compaction details (one
+   * entry per historical compaction). False when the rollup knows a count
+   * (via `compactionCount`) but the per-compaction records have been
+   * pruned from the legacy snapshot — i.e. `contextWindows` was missing
+   * or empty on the snapshot. Consumers must not render `compactions` as
+   * authoritative when this is false; the count is still authoritative.
+   */
+  compactionsDetailsAvailable?: boolean
 }

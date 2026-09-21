@@ -160,16 +160,37 @@ function countSubAgentCalls(events: MinimalEvent[]): number {
   return count
 }
 
+export interface BuildSessionStatsEventRollupOptions {
+  /**
+   * Number of historical compactions known to the snapshot via
+   * `snapshot.contextState.compactionCount` but whose per-compaction
+   * details (`snapshot.contextWindows`) are unavailable (legacy snapshot
+   * with the details pruned). The rollup adds this to the
+   * `compactionCount` it reports but does NOT synthesize fake per-record
+   * entries in `compactions[]`. `compactionsDetailsAvailable` is set to
+   * `false` in that case so consumers can render the count while
+   * acknowledging the per-compaction records are absent.
+   */
+  legacyCompactionCount?: number
+}
+
 /**
  * Build the session-wide event rollup from a list of stored events.
  *
  * `messageIdToResponseIndex` is used to backfill `responseIndex` on retry
  * records. When the caller does not have a response index map, retries are
  * returned with `responseIndex: 0`.
+ *
+ * `options.legacyCompactionCount` lets the caller carry over a known
+ * historical compaction count from a legacy snapshot whose per-compaction
+ * details (`contextWindows[]`) were pruned. The count is added to the
+ * reported `compactionCount`; `compactions[]` stays empty (no fabricated
+ * details) and `compactionsDetailsAvailable` becomes `false`.
  */
 export function buildSessionStatsEventRollup(
   events: MinimalEvent[],
   messageIdToResponseIndex?: Map<string, number>,
+  options?: BuildSessionStatsEventRollupOptions,
 ): SessionStatsEventRollup {
   const compactions = buildCompactions(events)
   const retries = buildRetries(events)
@@ -182,6 +203,8 @@ export function buildSessionStatsEventRollup(
   }
   const { byName, totalCount, totalErrors } = buildToolBreakdown(events)
   const subAgentCalls = countSubAgentCalls(events)
+  const legacy = options?.legacyCompactionCount ?? 0
+  const detailsAvailable = compactions.length > 0 || legacy === 0
   return {
     compactions,
     retries,
@@ -189,8 +212,9 @@ export function buildSessionStatsEventRollup(
     toolErrors: totalErrors,
     toolBreakdown: buildToolBreakdownEntries(byName),
     subAgentCalls,
-    compactionCount: compactions.length,
+    compactionCount: compactions.length + legacy,
     retryCount: retries.length,
+    compactionsDetailsAvailable: detailsAvailable,
   }
 }
 
@@ -330,6 +354,7 @@ export function emptyEventRollup(): SessionStatsEventRollup {
     subAgentCalls: 0,
     compactionCount: 0,
     retryCount: 0,
+    compactionsDetailsAvailable: true,
   }
 }
 

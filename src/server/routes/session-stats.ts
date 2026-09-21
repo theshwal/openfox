@@ -29,9 +29,12 @@ export async function handleGetSessionStats(
   req: Request,
   res: Response,
 ): Promise<void> {
-  const { getEventStore, combineEventsWithSnapshot } = await import('../events/index.js')
+  const { getEventStore, combineEventsWithSnapshot, getLegacyCompactionBaseline } = await import(
+    '../events/index.js'
+  )
   const { buildSessionStatsMessages } = await import('../events/folding.js')
   const { computeSessionStats } = await import('../../shared/stats.js')
+  const { buildSessionStatsEventRollup } = await import('../../shared/stats-rollup.js')
 
   const sessionId = req.params['id'] as string
   const session = sessionManager.getSession(sessionId)
@@ -44,6 +47,17 @@ export async function handleGetSessionStats(
   const { snapshot, events: eventsSinceSnapshot } = eventStore.getEventsSinceSnapshot(sessionId)
   const events = combineEventsWithSnapshot(sessionId, snapshot, eventsSinceSnapshot)
   const stats = computeSessionStats(buildSessionStatsMessages(events))
+
+  // The headline/stats aggregate uses `MessageStats` payloads (a separate
+  // pipeline from raw events). The event-derived rollup (compactions,
+  // retries, tool calls, sub-agent activity) is computed independently
+  // from the same combined event stream so legacy snapshots whose raw
+  // events were pruned still surface the correct counts.
+  const legacy = getLegacyCompactionBaseline(snapshot)
+  const rollup = buildSessionStatsEventRollup(events, undefined, legacy ? { legacyCompactionCount: legacy.legacyCompactionCount } : undefined)
+  if (stats) {
+    stats.events = rollup
+  }
 
   res.json({ stats })
 }

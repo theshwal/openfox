@@ -66,6 +66,7 @@ describe('GET /api/sessions/:id/stats — real handler', () => {
         getEventsSinceSnapshot: vi.fn(() => ({ snapshot: undefined, events: [] })),
       }),
       combineEventsWithSnapshot: vi.fn((_id: string, _snapshot: unknown, events: unknown[]) => events),
+      getLegacyCompactionBaseline: vi.fn(() => null),
     }))
 
     vi.doMock('../events/folding.js', () => ({
