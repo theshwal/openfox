@@ -168,8 +168,8 @@ export interface BuildSessionStatsEventRollupOptions {
    * with the details pruned). The rollup adds this to the
    * `compactionCount` it reports but does NOT synthesize fake per-record
    * entries in `compactions[]`. `compactionsDetailsAvailable` is set to
-   * `false` in that case so consumers can render the count while
-   * acknowledging the per-compaction records are absent.
+   * `false` whenever this baseline is non-zero, even if newer detailed
+   * compactions exist, because the per-compaction history is only partial.
    */
   legacyCompactionCount?: number
 }
@@ -184,8 +184,9 @@ export interface BuildSessionStatsEventRollupOptions {
  * `options.legacyCompactionCount` lets the caller carry over a known
  * historical compaction count from a legacy snapshot whose per-compaction
  * details (`contextWindows[]`) were pruned. The count is added to the
- * reported `compactionCount`; `compactions[]` stays empty (no fabricated
- * details) and `compactionsDetailsAvailable` becomes `false`.
+ * reported `compactionCount`; `compactions[]` contains only records that really exist (no fabricated
+ * details) and `compactionsDetailsAvailable` remains `false` while any
+ * legacy count-only baseline is present.
  */
 export function buildSessionStatsEventRollup(
   events: MinimalEvent[],
@@ -204,7 +205,10 @@ export function buildSessionStatsEventRollup(
   const { byName, totalCount, totalErrors } = buildToolBreakdown(events)
   const subAgentCalls = countSubAgentCalls(events)
   const legacy = options?.legacyCompactionCount ?? 0
-  const detailsAvailable = compactions.length > 0 || legacy === 0
+  // Details are complete only when no legacy count-only baseline exists.
+  // A post-snapshot detailed compaction does not make the missing historical
+  // legacy records suddenly complete.
+  const detailsAvailable = legacy === 0
   return {
     compactions,
     retries,
