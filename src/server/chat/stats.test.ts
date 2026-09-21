@@ -34,7 +34,7 @@ describe('stats computation', () => {
     const result = computeMessageStats({
       identity: identity,
       mode: 'builder',
-      timing: { ttft: 1, completionTime: 1 },
+      timing: { ttft: 1, completionTime: 1, tps: 0, prefillTps: 0 },
       usage: {
         promptTokens: 1000,
         completionTokens: 100,
