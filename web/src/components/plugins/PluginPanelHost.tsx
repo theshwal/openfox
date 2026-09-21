@@ -47,7 +47,7 @@ export function PluginPanelHost() {
     if (key.startsWith(prefix)) values[key.slice(prefix.length)] = value
   }
 
-  const iframeUrl = useMemo(() => {
+  const iframeUrl = (() => {
     if (panel.kind !== 'iframe' || !panel.url) return undefined
     const params = new URLSearchParams()
     if (token) params.set('token', token)
@@ -58,7 +58,7 @@ export function PluginPanelHost() {
     return `/api/plugins/${encodeURIComponent(targetPluginId)}/assets/${panel.url.replace(/^\//, '')}${
       query ? `?${query}` : ''
     }`
-  }, [panel.kind, panel.url, panelContext.projectId, panelContext.sessionId, panelContext.workdir, targetPluginId, token])
+  })()
 
   const contentNodes = Array.isArray(values['content'])
     ? (values['content'] as DeclarativeNode[])
