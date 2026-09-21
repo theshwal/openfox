@@ -3,6 +3,8 @@
  * across multiple assistant messages into SessionStats for benchmarking and trends.
  */
 
+import { emptyEventRollup } from './stats-rollup.js'
+
 import type {
   AgentSessionStats,
   CallStatsDataPoint,
@@ -229,6 +231,7 @@ function buildSessionStats(messagesWithStats: MessageWithStats[]): Omit<SessionS
     ...summaryFields(agg),
     dataPoints,
     callDataPoints,
+    events: emptyEventRollup(),
   }
 }
 

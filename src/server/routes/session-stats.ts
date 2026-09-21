@@ -3,6 +3,21 @@ import type { SessionManager } from '../session/index.js'
 
 /**
  * GET /api/sessions/:id/stats — full session stats (headline + per-response
+ * and per-call progression + event-derived rollup) for the StatsModal's
+ * on-demand detail load. Cheap: extracted from snapshot messages + later
+ * message.done events, no message rebuild. The always-on session payload
+ * only carries the lean summary; this endpoint is hit once when the user
+ * asks to see the full response log.
+ *
+ * The event-derived rollup (compactions, retries, tool calls, sub-agent
+ * activity) is computed server-side from the EventStore stream so the
+ * data is correct even when the user opens StatsModal long after the
+ * session finished. Cache fields are NEVER inferred from
+ * `prefTokenIncrement` — only provider-reported cache numbers are surfaced.
+ */
+
+/**
+ * GET /api/sessions/:id/stats — full session stats (headline + per-response
  * and per-call progression) for the StatsModal's on-demand detail load.
  * Cheap: extracted from snapshot messages + later message.done events, no
  * message rebuild. The always-on session payload only carries the lean

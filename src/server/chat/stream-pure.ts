@@ -70,7 +70,18 @@ export interface PureStreamResult {
   thinkingContent?: string
   toolCalls: ToolCall[]
   segments: MessageSegment[]
-  usage: { promptTokens: number; completionTokens: number }
+  /** Provider cache attribution — every field is sourced from the LLM
+   *  response (or the provider-agnostic TokenUsage normalizer), never from
+   *  prefTokenIncrement. Plugins can compute hit ratio / context
+   *  amplification from these fields alone. */
+  usage: {
+    promptTokens: number
+    completionTokens: number
+    totalTokens?: number
+    cachedPromptTokens?: number
+    cacheWriteTokens?: number
+    cacheSource?: 'provider' | 'estimated' | 'unavailable'
+  }
   timing: StreamTiming
   aborted: boolean
   modelParams?: ModelParams
@@ -414,6 +425,16 @@ export async function* streamLLMPure(options: PureStreamOptions): AsyncGenerator
     usage: {
       promptTokens: result.response.usage.promptTokens,
       completionTokens: result.response.usage.completionTokens,
+      totalTokens: result.response.usage.totalTokens,
+      ...(result.response.usage.cachedPromptTokens !== undefined && {
+        cachedPromptTokens: result.response.usage.cachedPromptTokens,
+      }),
+      ...(result.response.usage.cacheWriteTokens !== undefined && {
+        cacheWriteTokens: result.response.usage.cacheWriteTokens,
+      }),
+      ...(result.response.usage.cacheSource !== undefined && {
+        cacheSource: result.response.usage.cacheSource,
+      }),
     },
     timing: result.timing,
     aborted,
