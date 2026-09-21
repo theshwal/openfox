@@ -49,6 +49,7 @@ export function combineEventsWithSnapshot(
   events: import('./types.js').StoredEvent[],
 ): import('./types.js').StoredEvent[] {
   if (!snapshot) return events
+
   const snapshotEvent: import('./types.js').StoredEvent = {
     seq: 0,
     timestamp: snapshot.snapshotAt,
@@ -56,7 +57,58 @@ export function combineEventsWithSnapshot(
     type: 'turn.snapshot',
     data: snapshot,
   }
-  return [snapshotEvent, ...events]
+
+  // Reconstruct historical events that were absorbed into the snapshot.
+  // The snapshot only carries `context.compacted` / `pattern.retry` payloads
+  // (in `contextWindows` and `formatRetries`); the underlying events are
+  // gone from the raw store after a snapshot prune. Without this, downstream
+  // consumers (observability rollup, `EVENT_HOOK_MAP`) would see compactions=0
+  // and retries=0 for a session that has 50 of each pre-snapshot.
+  //
+  // Negative seq numbers prevent collision with real events (the store
+  // reserves positive seq). No double-counting: the raw event stream
+  // post-snapshot contains only events emitted AFTER the snapshot, so it
+  // never overlaps with the reconstructed pre-snapshot events.
+  const reconstructed: import('./types.js').StoredEvent[] = []
+  let syntheticSeq = -1
+
+  for (const compaction of snapshot.contextWindows ?? []) {
+    reconstructed.push({
+      seq: syntheticSeq--,
+      timestamp: compaction.timestamp,
+      sessionId,
+      type: 'context.compacted',
+      data: {
+        closedWindowId: compaction.closedWindowId,
+        newWindowId: compaction.newWindowId,
+        beforeTokens: compaction.beforeTokens,
+        afterTokens: compaction.afterTokens,
+        summary: '',
+      },
+    })
+  }
+  for (const retry of snapshot.formatRetries ?? []) {
+    reconstructed.push({
+      seq: syntheticSeq--,
+      timestamp: retry.timestamp,
+      sessionId,
+      type: 'pattern.retry',
+      data: {
+        attempt: retry.attempt,
+        maxAttempts: retry.maxAttempts,
+        messageId: '',
+        pattern: '',
+        field: '',
+        matchedContent: '',
+      },
+    })
+  }
+  // Sort by timestamp so they interleave correctly with any raw events that
+  // happen to share a timestamp; stable order keeps seq deterministic
+  // within ties.
+  reconstructed.sort((a, b) => a.timestamp - b.timestamp || a.seq - b.seq)
+
+  return [snapshotEvent, ...reconstructed, ...events]
 }
 
 function toSnapshotMessage(message: import('../../shared/types.js').Message): SnapshotMessage {

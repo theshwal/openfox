@@ -1014,11 +1014,22 @@ export interface ElementData {
 // field simply see an empty `events` block.
 // ============================================================================
 
+/**
+ * Per-compaction record. `afterTokens` is the size of the new context
+ * window's *initial state*: when the agent loop appends the `context.compacted`
+ * event it currently hard-codes `afterTokens: 0` as a sentinel meaning
+ * "fresh empty window just created", NOT a measured post-compaction size.
+ * Consumers should treat `afterTokens === 0 && beforeTokens > 0` as a fresh
+ * window start, not a zero-token measurement. The `reduction` and
+ * `reductionPercent` fields are always meaningful (previous window
+ * discarded).
+ */
 export interface CompactionEventRecord {
   timestamp: number
   closedWindowId: string
   newWindowId: string
   beforeTokens: number
+  /** Fresh-window sentinel when equal to 0; NOT a measured size. */
   afterTokens: number
   reduction: number
   reductionPercent: number
