@@ -32,7 +32,7 @@ describe('stats computation', () => {
   describe('provider cache propagation', () => {
   it('preserves provider cache fields on a single-call message', () => {
     const result = computeMessageStats({
-      identity: baseIdentity,
+      identity: identity,
       mode: 'builder',
       timing: { ttft: 1, completionTime: 1 },
       usage: {
@@ -59,7 +59,7 @@ describe('stats computation', () => {
 
   it('only emits aggregate cache totals when every call has provider attribution', () => {
     const common = {
-      ...baseIdentity,
+      ...identity,
       promptTokens: 100,
       completionTokens: 10,
       ttft: 1,
@@ -69,7 +69,7 @@ describe('stats computation', () => {
       totalTime: 2,
     }
     const complete = computeAggregatedStats({
-      identity: baseIdentity,
+      identity: identity,
       mode: 'builder',
       totalPrefillTokens: 200,
       totalGenTokens: 20,
@@ -86,7 +86,7 @@ describe('stats computation', () => {
     expect(complete.cacheSource).toBe('provider')
 
     const partial = computeAggregatedStats({
-      identity: baseIdentity,
+      identity: identity,
       mode: 'builder',
       totalPrefillTokens: 200,
       totalGenTokens: 20,
