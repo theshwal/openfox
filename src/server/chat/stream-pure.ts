@@ -617,7 +617,7 @@ export class TurnMetrics {
     completionTokens: number,
     previousContextTokens?: number,
     modelParams?: ModelParams,
-    providerUsage?: TokenUsage,
+    providerUsage?: Partial<TokenUsage>,
   ): void {
     const callIndex = this.llmCalls.length + 1
     this.totalPrefillTokens += promptTokens
