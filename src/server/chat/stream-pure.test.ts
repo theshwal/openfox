@@ -497,6 +497,40 @@ describe('stream-pure', () => {
       expect(stats.prefillSpeed).toBe(5_555.6) // rounded to 1 decimal: 5000/0.9 = 5555.6
     })
 
+    it('persists provider cache attribution independently from prefTokenIncrement', () => {
+      const metrics = new TurnMetrics()
+      metrics.addLLMCall(
+        { ttft: 0.5, completionTime: 2, tps: 15, prefillTps: 0 },
+        80_000,
+        500,
+        78_000,
+        undefined,
+        {
+          promptTokens: 80_000,
+          completionTokens: 500,
+          totalTokens: 80_500,
+          cachedPromptTokens: 76_000,
+          cacheWriteTokens: 1_000,
+          cacheSource: 'provider',
+        },
+      )
+
+      const stats = metrics.buildStats(
+        { providerId: 'p', providerName: 'MiniMax', backend: 'openai', model: 'm' },
+        'builder',
+      )
+
+      expect(stats.llmCalls?.[0]).toMatchObject({
+        prefTokenIncrement: 2_000,
+        cachedPromptTokens: 76_000,
+        cacheWriteTokens: 1_000,
+        cacheSource: 'provider',
+      })
+      expect(stats.cachedPromptTokens).toBe(76_000)
+      expect(stats.cacheWriteTokens).toBe(1_000)
+      expect(stats.cacheSource).toBe('provider')
+    })
+
     it('falls back to total tokens when previousContextTokens is undefined', () => {
       const metrics = new TurnMetrics()
       metrics.addLLMCall({ ttft: 2, completionTime: 4, tps: 8, prefillTps: 25 }, 50, 32, undefined)
