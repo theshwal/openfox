@@ -34,5 +34,11 @@
     "displayName": "OpenCode (Free Models)",
     "description": "OpenCode provider filtered to free models only (-free suffix), with automatic hourly model updates (1x/hour) and API key auth.",
     "githubUrl": "https://github.com/JamesDAdams/openfox-opencode-free"
+  },
+  {
+    "name": "openfox-devserver-status",
+    "displayName": "Dev Server Status",
+    "description": "Shows passive live dev-server status indicators on OpenFox session rows.",
+    "githubUrl": "https://github.com/theshwal/openfox-devserver-status"
   }
 ]
