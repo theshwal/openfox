@@ -1,18 +1,53 @@
-### Summary
+<!-- pr-contract:v1 -->
 
-<!-- What does this PR do? Why? -->
+## Delivery
 
-### AI-Enhanced Development
+- **Mode**: upstream / local / stack
+- **Target**: ...
+- **Base**: ...
+- **Stack**: none / ...
 
-Tell what models helped shape this PR:
+> Le mode et la destination doivent déjà être fixés par le contexte de livraison.
+> En mode `upstream`, le body final de la PR est adapté au contrat du dépôt cible `co-l/openfox`; ce template sert alors de contrat de travail local.
 
-- **AI Models:** <!-- e.g., DeepSeek V4 Flash, Qwen 3.5 122B, GPT 5.6, etc. -->
+## Issue / contexte
 
-_No AI used? Enter 'none'_
+Refs #...
 
-### Cache Impact
+## Objectif
 
-Does this PR affect anything cached — system prompts, tool definitions, skills, or other context?
+<!-- Quel résultat cette PR doit-elle produire, et pourquoi ? -->
 
-- **Yes** <!-- describe what changed and why -->
-- **No**
+## Changements
+
+- ...
+
+## Critères d'acceptation
+
+- [ ] ...
+
+## Preuves de validation
+
+| Vérification | Commande / preuve | Résultat |
+| --- | --- | --- |
+| Tests ciblés | `...` | PASS / FAIL / N/A |
+| Suite pertinente | `...` | PASS / FAIL / N/A |
+| Build / lint / typecheck | `...` | PASS / FAIL / N/A |
+
+## Risques et impacts
+
+- **Risque** : low / medium / high
+- **Breaking change** : non / oui — ...
+- **Sécurité / données / permissions** : aucun / ...
+- **Migration / déploiement / cache** : aucun / ...
+- **Impact utilisateur / release** : aucun / ...
+
+## AI / automatisation
+
+- **Exécution** : humain / OpenFox / autre
+- **Modèle(s)** : ...
+- **Workflow / session** : ...
+
+## Hors périmètre / limites
+
+- ...

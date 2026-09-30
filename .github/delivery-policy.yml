@@ -1,0 +1,91 @@
+version: 1
+
+repository:
+  kind: working-fork
+  default_base: main
+  upstream:
+    repository: co-l/openfox
+    base: develop
+
+delivery:
+  require_explicit_mode: true
+  default_mode: none
+
+quality:
+  source: repo
+  require_verified_criteria: true
+  require_clean_review: true
+  revalidate_after_repair: true
+
+human:
+  default: false
+  required_for:
+    - product-decision
+    - explicit-policy-exception
+    - unresolved-conflict
+
+modes:
+  upstream:
+    target:
+      repository: co-l/openfox
+      base: develop
+    pr:
+      contract: target-repository
+      title: target-repository
+    publish:
+      target: upstream
+      draft: false
+      rebase_before_publish: true
+      revalidate_after_rebase: true
+    merge:
+      owner: upstream
+      mode: external
+    conflicts:
+      strategy: repair-revalidate
+    post_merge:
+      verify: true
+
+  local:
+    target:
+      repository: theshwal/openfox
+      base: main
+    pr:
+      contract: v1
+      issue_link: refs
+      title: conventional
+      template: .github/PULL_REQUEST_TEMPLATE.md
+    publish:
+      target: origin
+      draft: false
+    merge:
+      owner: automate
+      mode: auto
+      method: squash
+    conflicts:
+      strategy: repair-revalidate
+    post_merge:
+      verify: true
+
+  stack:
+    target:
+      repository: theshwal/openfox
+      base_pattern: integration/{stack}
+    pr:
+      contract: v1
+      issue_link: refs
+      title: conventional
+      template: .github/PULL_REQUEST_TEMPLATE.md
+    publish:
+      target: origin
+      draft: false
+    merge:
+      owner: automate
+      mode: auto
+      method: squash
+    conflicts:
+      strategy: repair-revalidate
+    finalization:
+      require_integrated_validation: true
+      allowed_targets:
+        - local
+        - upstream
