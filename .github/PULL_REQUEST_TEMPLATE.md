@@ -1,10 +1,18 @@
 <!-- pr-contract:v1 -->
 
+## Delivery
+
+- **Mode**: upstream / local / stack
+- **Target**: ...
+- **Base**: ...
+- **Stack**: none / ...
+
+> Le mode et la destination doivent déjà être fixés par le contexte de livraison.
+> En mode `upstream`, le body final de la PR est adapté au contrat du dépôt cible `co-l/openfox`; ce template sert alors de contrat de travail local.
+
 ## Issue / contexte
 
 Refs #...
-
-> Par défaut utiliser `Refs #...`. Utiliser `Closes/Fixes/Resolves #...` uniquement si la policy du dépôt autorise la fermeture automatique au merge.
 
 ## Objectif
 
@@ -12,13 +20,9 @@ Refs #...
 
 ## Changements
 
-<!-- Décrire les changements réellement livrés. -->
-
 - ...
 
 ## Critères d'acceptation
-
-<!-- Reprendre les critères vérifiables de l'issue/du plan. Ne cocher que ce qui est démontré. -->
 
 - [ ] ...
 
@@ -29,8 +33,6 @@ Refs #...
 | Tests ciblés | `...` | PASS / FAIL / N/A |
 | Suite pertinente | `...` | PASS / FAIL / N/A |
 | Build / lint / typecheck | `...` | PASS / FAIL / N/A |
-
-<!-- Ajouter seulement les contrôles réellement exécutés. Ne pas déclarer PASS sans preuve. -->
 
 ## Risques et impacts
 
@@ -45,12 +47,6 @@ Refs #...
 - **Exécution** : humain / OpenFox / autre
 - **Modèle(s)** : ...
 - **Workflow / session** : ...
-
-## Livraison
-
-- **Branche de base** : ...
-- **Policy de merge** : policy du dépôt
-- **Vérification post-merge requise** : non / oui — ...
 
 ## Hors périmètre / limites
 
