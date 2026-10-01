@@ -17,7 +17,7 @@
   },
   "entryStep": "setup",
   "settings": {
-    "maxIterations": 20
+    "maxIterations": 80
   },
   "steps": [
     {
